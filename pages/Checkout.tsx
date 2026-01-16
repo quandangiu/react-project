@@ -10,25 +10,46 @@ export const Checkout: React.FC = () => {
   const { state, dispatch } = useStore();
   const navigate = useNavigate();
 
-  const total = state.cart.reduce((acc, item) => acc + (item.price * item.quantity), 0) * 1.08;
+  const subtotal = state.cart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+  const total = subtotal * 1.08;
 
   const handleNext = () => {
     setLoading(true);
     setTimeout(() => {
       setLoading(false);
       setStep(step + 1);
-    }, 1000);
+    }, 800);
   };
 
   const handlePlaceOrder = () => {
     setLoading(true);
+    
+    // Simulate API Call
     setTimeout(() => {
+      const orderData = {
+        id: `ORD-${Date.now().toString().slice(-6)}`,
+        userId: state.user?.id || 'guest',
+        date: new Date().toISOString().split('T')[0],
+        total: parseFloat(total.toFixed(2)),
+        status: 'Pending',
+        items: state.cart,
+        shippingAddress: state.user?.address || '123 Test St',
+        paymentMethod: 'Credit Card'
+      };
+
+      // @ts-ignore
+      dispatch({ type: 'PLACE_ORDER', payload: orderData });
+      
       setLoading(false);
-      dispatch({ type: 'CLEAR_CART' });
-      alert('Order Placed Successfully!');
-      navigate('/');
+      alert('Order Placed Successfully! You can track it in your profile.');
+      navigate('/profile');
     }, 2000);
   };
+
+  if (state.cart.length === 0) {
+      navigate('/cart');
+      return null;
+  }
 
   return (
     <div className="container mx-auto px-4 py-24 max-w-4xl">
@@ -41,28 +62,28 @@ export const Checkout: React.FC = () => {
         ].map((s, idx) => (
           <div key={s.id} className="flex items-center">
              <div className={`flex flex-col items-center relative z-10`}>
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${step >= s.id ? 'bg-primary-600 text-white' : 'bg-gray-200 text-gray-500'}`}>
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${step >= s.id ? 'bg-primary-600 text-white shadow-lg shadow-primary-500/30' : 'bg-gray-100 text-gray-400'}`}>
                   {s.icon}
                 </div>
-                <span className="text-xs font-medium mt-2 text-gray-600">{s.label}</span>
+                <span className={`text-xs font-bold mt-2 transition-colors ${step >= s.id ? 'text-primary-700' : 'text-gray-400'}`}>{s.label}</span>
              </div>
              {idx < 2 && (
-               <div className={`w-24 h-1 -mt-6 mx-2 transition-all ${step > s.id ? 'bg-primary-600' : 'bg-gray-200'}`}></div>
+               <div className={`w-24 h-1 -mt-6 mx-2 transition-all rounded-full ${step > s.id ? 'bg-primary-600' : 'bg-gray-200'}`}></div>
              )}
           </div>
         ))}
       </div>
 
-      <div className="bg-white p-8 md:p-12 rounded-3xl shadow-lg border border-gray-100">
+      <div className="bg-white p-8 md:p-12 rounded-3xl shadow-xl border border-gray-100">
         {step === 1 && (
           <div className="space-y-6 animate-fade-in">
-             <h2 className="text-2xl font-bold mb-6">Shipping Information</h2>
+             <h2 className="text-2xl font-bold mb-6 text-gray-900">Shipping Information</h2>
              <div className="grid grid-cols-2 gap-6">
-                <Input label="First Name" placeholder="John" />
-                <Input label="Last Name" placeholder="Doe" />
+                <Input label="First Name" placeholder="John" defaultValue={state.user?.name?.split(' ')[0]} />
+                <Input label="Last Name" placeholder="Doe" defaultValue={state.user?.name?.split(' ')[1]} />
              </div>
-             <Input label="Email Address" type="email" placeholder="john@example.com" />
-             <Input label="Street Address" placeholder="123 Main St" />
+             <Input label="Email Address" type="email" placeholder="john@example.com" defaultValue={state.user?.email} />
+             <Input label="Street Address" placeholder="123 Main St" defaultValue={state.user?.address} />
              <div className="grid grid-cols-3 gap-6">
                 <Input label="City" placeholder="New York" />
                 <Input label="State" placeholder="NY" />
@@ -76,17 +97,18 @@ export const Checkout: React.FC = () => {
 
         {step === 2 && (
           <div className="space-y-6 animate-fade-in">
-            <h2 className="text-2xl font-bold mb-6">Payment Method</h2>
+            <h2 className="text-2xl font-bold mb-6 text-gray-900">Payment Method</h2>
             
             <div className="grid grid-cols-3 gap-4 mb-6">
-              <div className="border-2 border-primary-600 bg-blue-50 p-4 rounded-xl text-center cursor-pointer">
+              <div className="border-2 border-primary-600 bg-blue-50/50 p-6 rounded-2xl text-center cursor-pointer relative overflow-hidden">
+                 <div className="absolute top-2 right-2 text-primary-600"><Check size={16} /></div>
                  <p className="font-bold text-primary-700">Credit Card</p>
               </div>
-              <div className="border border-gray-200 p-4 rounded-xl text-center cursor-pointer hover:border-gray-400">
-                 <p className="font-medium">PayPal</p>
+              <div className="border border-gray-200 p-6 rounded-2xl text-center cursor-pointer hover:border-gray-400 hover:bg-gray-50 transition-all">
+                 <p className="font-medium text-gray-600">PayPal</p>
               </div>
-              <div className="border border-gray-200 p-4 rounded-xl text-center cursor-pointer hover:border-gray-400">
-                 <p className="font-medium">Apple Pay</p>
+              <div className="border border-gray-200 p-6 rounded-2xl text-center cursor-pointer hover:border-gray-400 hover:bg-gray-50 transition-all">
+                 <p className="font-medium text-gray-600">COD</p>
               </div>
             </div>
 
@@ -104,22 +126,22 @@ export const Checkout: React.FC = () => {
 
         {step === 3 && (
           <div className="space-y-6 animate-fade-in">
-             <h2 className="text-2xl font-bold mb-6">Review Order</h2>
-             <div className="bg-gray-50 p-6 rounded-2xl mb-6">
+             <h2 className="text-2xl font-bold mb-6 text-gray-900">Review Order</h2>
+             <div className="bg-gray-50 p-6 rounded-2xl mb-6 border border-gray-100">
                {state.cart.map(item => (
-                 <div key={item.id} className="flex justify-between mb-2 text-sm">
-                   <span className="text-gray-600">{item.name} x {item.quantity}</span>
-                   <span className="font-medium">${(item.price * item.quantity).toFixed(2)}</span>
+                 <div key={item.id} className="flex justify-between mb-3 text-sm">
+                   <span className="text-gray-600 font-medium">{item.name} <span className="text-gray-400">x{item.quantity}</span></span>
+                   <span className="font-bold text-gray-900">${(item.price * item.quantity).toFixed(2)}</span>
                  </div>
                ))}
-               <div className="border-t border-gray-200 mt-4 pt-4 flex justify-between font-bold text-lg">
-                 <span>Total</span>
+               <div className="border-t border-gray-200 mt-4 pt-4 flex justify-between font-bold text-lg text-gray-900">
+                 <span>Total Amount</span>
                  <span>${total.toFixed(2)}</span>
                </div>
              </div>
              <div className="flex justify-between pt-6">
                <Button variant="ghost" onClick={() => setStep(2)}>Back</Button>
-               <Button onClick={handlePlaceOrder} isLoading={loading} className="w-48">Place Order</Button>
+               <Button onClick={handlePlaceOrder} isLoading={loading} className="w-48 shadow-lg shadow-primary-600/30">Place Order</Button>
              </div>
           </div>
         )}

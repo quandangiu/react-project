@@ -1,24 +1,70 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
-import { AppState, Action, Product, CartItem } from '../types';
-import { MOCK_PRODUCTS, MOCK_ORDERS, MOCK_MESSAGES } from '../mockData';
+import { AppState, Action, AuthResponse } from '../types';
+import { db } from '../mockData';
 
 const initialState: AppState = {
   cart: [],
   user: null,
-  products: MOCK_PRODUCTS,
-  orders: MOCK_ORDERS,
-  messages: MOCK_MESSAGES,
-  isLoading: false,
+  isAuthenticated: false,
+  products: [],
+  orders: [],
+  messages: [],
+  isLoading: true,
 };
 
 const StoreContext = createContext<{
   state: AppState;
   dispatch: React.Dispatch<Action>;
-}>({ state: initialState, dispatch: () => null });
+  actions: {
+    login: (email: string, pass: string) => Promise<void>;
+    register: (data: any) => Promise<void>;
+    logout: () => void;
+  }
+}>({ 
+  state: initialState, 
+  dispatch: () => null,
+  actions: {
+    login: async () => {},
+    register: async () => {},
+    logout: () => {}
+  }
+});
 
 const storeReducer = (state: AppState, action: Action): AppState => {
   switch (action.type) {
-    // CART ACTIONS
+    case 'INIT_APP':
+      return {
+        ...state,
+        products: db.getProducts(),
+        orders: db.getOrders(),
+        messages: db.getMessages(),
+        isLoading: false
+      };
+    case 'SET_LOADING':
+      return { ...state, isLoading: action.payload };
+    
+    // AUTH
+    case 'LOGIN_SUCCESS':
+      return { 
+        ...state, 
+        user: action.payload.user, 
+        isAuthenticated: true,
+        isLoading: false 
+      };
+    case 'LOGOUT':
+      return { 
+        ...state, 
+        user: null, 
+        isAuthenticated: false,
+        cart: [] // Clear cart on logout
+      };
+    case 'UPDATE_USER':
+      return { 
+        ...state, 
+        user: state.user ? { ...state.user, ...action.payload } : null 
+      };
+
+    // CART
     case 'ADD_TO_CART': {
       const existingItem = state.cart.find(item => item.id === action.payload.id);
       if (existingItem) {
@@ -47,37 +93,47 @@ const storeReducer = (state: AppState, action: Action): AppState => {
     case 'CLEAR_CART':
       return { ...state, cart: [] };
 
-    // AUTH & USER ACTIONS
-    case 'LOGIN':
-      return { ...state, user: action.payload };
-    case 'LOGOUT':
-      return { ...state, user: null };
-    case 'UPDATE_USER':
-      return { ...state, user: state.user ? { ...state.user, ...action.payload } : null };
-
-    // ADMIN - PRODUCT ACTIONS
-    case 'ADD_PRODUCT':
-      return { ...state, products: [action.payload, ...state.products] };
-    case 'UPDATE_PRODUCT':
+    // ADMIN
+    case 'ADD_PRODUCT': {
+      const newP = db.addProduct(action.payload);
+      return { ...state, products: [newP, ...state.products] };
+    }
+    case 'UPDATE_PRODUCT': {
+      db.updateProduct(action.payload);
       return { 
         ...state, 
         products: state.products.map(p => p.id === action.payload.id ? action.payload : p) 
       };
-    case 'DELETE_PRODUCT':
+    }
+    case 'DELETE_PRODUCT': {
+      db.deleteProduct(action.payload);
       return { ...state, products: state.products.filter(p => p.id !== action.payload) };
-
-    // ADMIN - ORDER ACTIONS
-    case 'UPDATE_ORDER_STATUS':
+    }
+    case 'UPDATE_ORDER_STATUS': {
+      db.updateOrderStatus(action.payload.orderId, action.payload.status);
       return {
         ...state,
         orders: state.orders.map(o => 
           o.id === action.payload.orderId ? { ...o, status: action.payload.status } : o
         )
       };
+    }
 
-    // CHAT ACTIONS
-    case 'SEND_MESSAGE':
+    // ORDER
+    case 'PLACE_ORDER': {
+      db.createOrder(action.payload);
+      return {
+        ...state,
+        orders: [action.payload, ...state.orders],
+        cart: []
+      };
+    }
+
+    // CHAT
+    case 'SEND_MESSAGE': {
+      db.addMessage(action.payload);
       return { ...state, messages: [...state.messages, action.payload] };
+    }
 
     default:
       return state;
@@ -87,23 +143,64 @@ const storeReducer = (state: AppState, action: Action): AppState => {
 export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, dispatch] = useReducer(storeReducer, initialState);
 
-  // Persistence logic (Simplified)
+  // Initialize App Data
   useEffect(() => {
-    const savedCart = localStorage.getItem('cart');
-    const savedUser = localStorage.getItem('user');
-    
-    // In real app, we would dispatch actions to hydrate state here
-    // For this demo, we rely on the component mounting and local state logic
-    // or we could modify initial state.
-    // However, to keep it simple and clean, we will just persist CART
+    // Simulate Network Latency for realism
+    const init = async () => {
+      await new Promise(r => setTimeout(r, 500));
+      dispatch({ type: 'INIT_APP' });
+
+      // Check for persisted session
+      const session = localStorage.getItem('session');
+      if (session) {
+        const { user } = JSON.parse(session);
+        dispatch({ type: 'LOGIN_SUCCESS', payload: { user, token: 'mock-jwt' } });
+      }
+    };
+    init();
   }, []);
 
+  // Persist Cart
   useEffect(() => {
     localStorage.setItem('cart', JSON.stringify(state.cart));
   }, [state.cart]);
 
+  // Auth Actions Wrappers
+  const actions = {
+    login: async (email: string, pass: string) => {
+      dispatch({ type: 'SET_LOADING', payload: true });
+      await new Promise(r => setTimeout(r, 800)); // Network delay
+      try {
+        const user = db.login(email, pass);
+        const token = 'mock-jwt-token-' + Date.now();
+        localStorage.setItem('session', JSON.stringify({ user, token }));
+        dispatch({ type: 'LOGIN_SUCCESS', payload: { user, token } });
+      } catch (e: any) {
+        dispatch({ type: 'SET_LOADING', payload: false });
+        throw new Error(e.message);
+      }
+    },
+    register: async (data: any) => {
+      dispatch({ type: 'SET_LOADING', payload: true });
+      await new Promise(r => setTimeout(r, 800));
+      try {
+        const user = db.register(data);
+        const token = 'mock-jwt-token-' + Date.now();
+        localStorage.setItem('session', JSON.stringify({ user, token }));
+        dispatch({ type: 'LOGIN_SUCCESS', payload: { user, token } });
+      } catch (e: any) {
+        dispatch({ type: 'SET_LOADING', payload: false });
+        throw new Error(e.message);
+      }
+    },
+    logout: () => {
+      localStorage.removeItem('session');
+      dispatch({ type: 'LOGOUT' });
+    }
+  };
+
   return (
-    <StoreContext.Provider value={{ state, dispatch }}>
+    <StoreContext.Provider value={{ state, dispatch, actions }}>
       {children}
     </StoreContext.Provider>
   );
