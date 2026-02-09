@@ -95,7 +95,7 @@ react-project/
 
 ## 👤 Tác giả
 
-**Quan Dang**
+**Quan Dinh Nguyen**
 
 ## 📄 License
 
